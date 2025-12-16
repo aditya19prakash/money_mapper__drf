@@ -9,7 +9,7 @@ from transaction.models import Transaction
 from rest_framework.pagination import PageNumberPagination
 
 class TransactionPagination(PageNumberPagination):
-      page_size = 30
+      page_size = 50
       max_page_size = 50
       page_size_query_param = 'size'
       
@@ -46,7 +46,6 @@ class Send_bank_Statement(APIView):
                   return Response({"message":"No transaction saved"},status=400)
             
       
-      
 class View_transaction(APIView):
       serializer_class = Transaction_View_serializer
       def get(self,request,id):
@@ -55,6 +54,15 @@ class View_transaction(APIView):
             start  = request.query_params.get("from")
             end  = request.query_params.get("to")
             name = request.query_params.get("name")
+            credit_from  = request.query_params.get("credit_from")
+            credit_to  = request.query_params.get("credit_to")
+            debit_from =  request.query_params.get("debit_from")
+            debit_to  = request.query_params.get("debit_to")
+            if credit_from and credit_to and debit_from and debit_to:
+                   return Response(
+                         {"message": "Use either credit range or debit range, not both."},
+                         status=status.HTTP_400_BAD_REQUEST
+                   )
             if date and start and end:
                  return  Response({"message": "Use either 'date' OR ('from' and 'to'), not both."},status=status.HTTP_400_BAD_REQUEST)
             if date:
@@ -70,11 +78,25 @@ class View_transaction(APIView):
                   if start > end:
                        return Response({"message": "'from' date cannot be greater than 'to' date"},status=400)
                   queryset = queryset.filter(txn_date__range = (start,end))
+           
+            if credit_from and credit_to:
+                  credit_from = int(credit_from)
+                  credit_to = int(credit_to)
+                  if not isinstance(credit_from,int) or not isinstance(credit_to,int):
+                       return Response({"message":"Invalid format credit"},status=400)
+                  queryset = queryset.filter(credit__range = (credit_from,credit_to),credit__isnull = False)
+            if debit_from and debit_to:
+                  debit_from = int(debit_from)
+                  debit_to = int(debit_to)
+                  if not isinstance(debit_from,int) or not isinstance(debit_to,int):
+                       return Response({"message":"Invalid format credit"},status=400)
+                  queryset = queryset.filter(debit__range = (debit_from,debit_to),debit__isnull = False)
             if name:
                   queryset = queryset.filter(account_name__icontains = name)
             if not queryset.exists():
                   return Response({"message": f"Transaction not found"},
                   status=status.HTTP_404_NOT_FOUND)
+            queryset= queryset.filter().order_by("txn_date")
             paginator = TransactionPagination()
             paginted_data = paginator.paginate_queryset(queryset,request)
             serializer = self.serializer_class(paginted_data,many=True)
