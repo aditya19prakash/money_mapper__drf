@@ -21,6 +21,6 @@ class Transaction_serializer(serializers.ModelSerializer):
 class Transaction_View_serializer(serializers.ModelSerializer):
     class Meta:  # type: ignore
         model = Transaction
-        fields = ["id","account_name","credit","debit","txn_date","description","payment_method"]
+        fields = ["id","account_name","category","credit","debit","txn_date","description","payment_method"]
         read_only_fields = ["id"]       
 

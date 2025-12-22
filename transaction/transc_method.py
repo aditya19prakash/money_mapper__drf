@@ -1,10 +1,10 @@
+import hashlib
 import random
+import secrets
 import pandas as pd
 import numpy as np
-
-
 class Excel_cleaning:
-
+    
     @staticmethod
     def convert_integer(value):
         if pd.isna(value):
@@ -28,7 +28,6 @@ class Excel_cleaning:
                 engine="openpyxl",
                 skiprows=19
             )
-
             df = df.iloc[:, :6]
             df.columns = [
                 "txn_date",
@@ -38,54 +37,36 @@ class Excel_cleaning:
                 "debit",
                 "credit",
             ]
-
             df.drop(columns=["ref_no", "value_date"], inplace=True)
-
-           
             df["txn_date"] = pd.to_datetime(
                 df["txn_date"],
                 format="%d-%m-%Y",
                 errors="coerce"
             ).dt.date
-
             df["user"] = user_id
-
-   
             df["debit"] = (
                 pd.to_numeric(df["debit"], errors="coerce")
                 .apply(Excel_cleaning.convert_integer)
             )
-
             df["credit"] = (
                 pd.to_numeric(df["credit"], errors="coerce")
                 .apply(Excel_cleaning.convert_integer)
             )
-
-          
             df = df[
                 df["description"].notna() &
                 df["description"].astype(str).str.strip().ne("")
-            ]
-
-       
+            ]      
             df["description"] = df["description"].apply(
                 Excel_cleaning.convert_text
-            )
-
-          
-            df = df[~(df["debit"].isna() & df["credit"].isna())]
-
-         
+            )       
+            df = df[~(df["debit"].isna() & df["credit"].isna())]     
             df["account_name"] = df["description"].apply(
                 Excel_cleaning.extract_name
             )
-
             df["payment_method"] = df["description"].apply(
                 Excel_cleaning.extract_payment_method
             )
-
-            df["category"] = df["account_name"]
-
+            df["category"] = "uncatogrized"
             df["id"] = df["description"].apply(
                 Excel_cleaning.extract_transc_id
             )
@@ -101,14 +82,25 @@ class Excel_cleaning:
 
     @staticmethod
     def extract_transc_id(description):
+        if not isinstance(description, str):
+            return None
+
+        desc = description.strip()
+        if desc.upper() == "CREDIT INTEREST---":
+            return Excel_cleaning._generate_random_12_digit()
+
         try:
-            if Excel_cleaning.extract_payment_method(description)!="UPI":
-                raise ValueError("")
-            parts = str(description).split("/")
-            if len(parts) > 2:
-                return parts[2].strip()
-        except:
-            return random.randint(100000000000, 999999999999)
+           
+            if Excel_cleaning.extract_payment_method(desc) == "UPI":
+                parts = desc.split("/")
+                if len(parts) > 2 and parts[2].isdigit():
+                    return parts[2].strip()
+
+          
+            return Excel_cleaning._generate_deterministic_12_digit(desc)
+
+        except Exception:
+            return Excel_cleaning._generate_deterministic_12_digit(desc)
 
     @staticmethod
     def extract_payment_method(description):
@@ -118,13 +110,13 @@ class Excel_cleaning:
         desc = description.upper()
 
         data = {
-            "CDM SERVICE CHARGES": "Service Charges",
             "UPI": "UPI",
-            "CDM": "Money Transfer",
-            "CHEQUE": "Cheque",
-            "ATM": "ATM",
             "NEFT": "NEFT",
             "IMPS": "IMPS",
+            "ATM": "ATM",
+            "CHEQUE": "Cheque",
+            "CDM": "Money Transfer",
+            "CDM SERVICE CHARGES": "Service Charges",
         }
 
         for key, value in data.items():
@@ -132,6 +124,15 @@ class Excel_cleaning:
                 return value
 
         return "Unknown"
+    @staticmethod
+    def _generate_deterministic_12_digit(text):
+        hash_bytes = hashlib.sha256(text.encode()).hexdigest()
+        numeric_hash = int(hash_bytes, 16)
+        return str(numeric_hash % 10**12).zfill(12)
+
+    @staticmethod
+    def _generate_random_12_digit():
+        return ''.join(str(secrets.randbelow(10)) for _ in range(12))
 
     @staticmethod
     def extract_name(description):
